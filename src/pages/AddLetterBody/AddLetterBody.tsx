@@ -2,8 +2,7 @@ import { Dispatch, SetStateAction, useState } from "react";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import "./AddLetterBody.css";
 
-// Google Generative AI SDK
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 //Custom Components
 import TextInput from "../../components/Inputs/TextInput";
@@ -55,43 +54,44 @@ function AddLetterBody({ club, setClub }: AddLetterBodyProps) {
   const sendPromptToGeminiAPI = async () => {
     if (!prompt) {
       setError("Please enter a prompt.");
-      setTimeout(() => {
-        setError("");
-      }, 3000);
       return;
     }
+
     try {
-      setError("");
       setLoading(true);
-      const apiKey = `${import.meta.env.VITE_API_KEY}`;
-      console.log(apiKey);
+      setError("");
 
-      // Initialize the Google Generative AI SDK
-      const genAI = new GoogleGenerativeAI(apiKey);
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        setError("Gemini API key not found");
+        return;
+      }
 
-      // Fetch the model
-      const model = await genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-      });
-      const ThePromt = `Write the body of a formal letter requesting permission to  ${prompt} from the ${recipient}  ${
+      const ai = new GoogleGenAI({ apiKey });
+
+      const finalPrompt = `Write the body of a formal letter requesting permission to ${prompt} from the ${recipient} ${
         recipient === "HOD" ? `of the ${department}` : ""
-      }. The tone should be polite and professional. Do not include the address, signature, or greeting.`;
+      }. The tone should be polite and professional. Do not include address, greeting, or signature.`;
 
-      // Send prompt and get the response
-      const result = await model.generateContent(ThePromt);
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: finalPrompt,
+      });
 
-      //   setResponse(result.response.text());
-      setBody(result.response.text());
-    } catch (error) {
-      console.error("Error calling the Google Gemini API:", error);
-      setError("Error occurred while calling the API.");
-      //   setResponse("Error occurred while calling the API.");
+      if (!response?.text) {
+        setError("No response generated");
+        return;
+      }
+
+      setBody(response.text);
+    } catch (err) {
+      console.error(err);
+      setError("Gemini request failed");
     } finally {
       setLoading(false);
     }
   };
 
-  //Ser error in empty fields
   const errorSetter = () => {
     if (!toAddress) setToAddress("");
     if (!subject) setSubject("");
@@ -102,7 +102,6 @@ function AddLetterBody({ club, setClub }: AddLetterBodyProps) {
     if (!date || !subject || !body || (recipient === "Others" && !toAddress)) {
       errorSetter();
     } else {
-      // Structure Data
       setLetterBody({
         recipient,
         designation:
@@ -204,6 +203,14 @@ function AddLetterBody({ club, setClub }: AddLetterBodyProps) {
         <Button fullWidth onClick={handlePrintButton} variant="contained">
           <span>Print</span>
         </Button>
+        <PDFDownloadLink
+          document={<LetterHead club={club} data={{}} />}
+          fileName={`${club}-letter.pdf`}
+        >
+          <Button variant="contained" fullWidth>
+            Download Empty
+          </Button>
+        </PDFDownloadLink>
       </div>
       {open && (
         <div className="pdf-download" ref={parent}>
